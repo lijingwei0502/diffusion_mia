@@ -1,39 +1,35 @@
 # Towards Black-Box Membership Inference Attack for Diffusion Models
-Official repo for [Towards Black-Box Membership Inference Attack for Diffusion Models](https://arxiv.org/pdf/2405.20771).
-
 This repository contains the code of the paper [Towards Black-Box Membership Inference Attack for Diffusion Models](https://arxiv.org/pdf/2405.20771).
-
-
-
 
 ## DDIM
 
 ### Requirements
 
+Install dependencies from the provided conda environment file:
 
+```bash
+conda env create -f DDIM/environment.yml
+```
 
-### Train DDIM model
+---
 
-We provide dataset splits such as `DDIM/CIFAR10_train_ratio0.5.npz` (placed under the `DDIM/` folder).
-Put datasets (`cifar10`, `cifar100`, `stl10`, `svhn`, `tiny-imagenet`) under:
+### Train DDIM Model
+
+We provide pre-defined dataset splits such as `DDIM/CIFAR10_train_ratio0.5.npz` (stored under the `DDIM/` directory).
+Place the raw datasets (`cifar10`, `cifar100`, `stl10`) under:
 
 ```
 DDIM/data/datasets/pytorch
 ```
 
-You can change paths in:
-
-* `train.py` → `get_dataset`
-* `dataset_utils.load_member_data`
-
-Change log dir / dataset in `train.py` by editing:
+You can change the logging directory and dataset name in `train.py`:
 
 ```python
 FLAGS.logdir   # e.g., './logs/DDPM_SVHN_EPS'
-FLAGS.dataset  # 'CIFAR10' | 'CIFAR100' | 'STL10' | 'SVHN' | 'TINY-IN'
+FLAGS.dataset  # 'CIFAR10' | 'CIFAR100' | 'STL10' |
 ```
 
-**Command:**
+To train the model:
 
 ```bash
 cd DDIM
@@ -42,11 +38,12 @@ python train.py
 
 ---
 
-### Attack DDIM model
+### Attack DDIM Model
 
-Runs Membership Inference Attacks on a trained checkpoint (expects files like `logs/DDPM_<DATASET>_EPS/ckpt-step<STEP>.pt`).
+Run membership inference attacks on a trained checkpoint.
+Checkpoints are expected in the format `logs/DDPM_<DATASET>_EPS/ckpt-step<STEP>.pt`.
 
-**Command:**
+**Example command:**
 
 ```bash
 cd DDIM
@@ -60,67 +57,182 @@ python attack.py \
   --k 100
 ```
 
-**Parameters:**
+**Key parameters:**
 
-* `--checkpoint` — training step of the saved ckpt (e.g., `800000` → `ckpt-step800000.pt`)
-* `--dataset` — `CIFAR10` | `CIFAR100` | `STL10` | `SVHN` | `TINY-IN`
-* `--attacker_name` (case-sensitive) —
+* `--checkpoint` — Training step of the saved checkpoint (e.g., `800000` → `ckpt-step800000.pt`)
+* `--dataset` — One of: `CIFAR10` | `CIFAR100` | `STL10` | `SVHN` | `TINY-IN`
+* `--attacker_name` — Attack method (case-sensitive):
   `Naive` (Loss) | `SecMI` | `PIA` | `PIAN` | `ReDiffuse` (ours)
-* `--attack_num`, `--interval`, `--norm`, `--k` — attack hyperparameters
+* `--attack_num`, `--interval`, `--norm`, `--k` — Attack hyperparameters
 
 **Outputs:**
 
-* Training: checkpoints under `logs/DDPM_*_EPS/`
-* Attack: prints `AUC`, `ASR`, `TPR@1%FPR` and appends to `result.csv`
+* **Training:** Checkpoints stored under `logs/DDPM_*_EPS/`
+* **Attack:**
 
-## DiT
+  * Prints `AUC`, `ASR`, `TPR@1%FPR` to console
+  * Appends results to `result.csv` in the current directory
 
-### train DiT model
+---
 
-We provide the split of the dataset. They are `DDPM/CIFAR10_train_ratio0.5.npz` and `DDPM/TINY-IN_train_ratio0.5.npz`. To train the DDPM, you need put the `cifar10`, `cifar100`, `stl10`, `tiny-imagenet`dataset into `DDPM/data/pytorch`. You can also change the directory by modifying the path in `main.get_dataset` function and `dataset_utils.load_member_data`.  You can change the log directory by modifying `FLAGS.logdir` in `main.py`. You can change the `FLAGS.dataset` to select the dataset.
+## DIT
 
-Then, to train the DDPM, just run command below.
+### Requirements
+
+Install dependencies from the provided conda environment file:
+
 ```bash
-cd DDPM
-python main.py
+conda env create -f DiT/environment.yml
 ```
 
-### attack DiT model
-Just run command below.
+---
+
+### Train DIT Model
+
+We use the DiT-XL/2 architecture by default. The script supports multi-GPU training via PyTorch DDP.
+
+
+#### Example command
+
 ```bash
-cd DDPM
-python micro_attack.py 
+torchrun --nproc_per_node=<NUM_GPUS> train.py \
+  --data-path /path/to/dataset \
+  --results-dir ./results \
+  --model DiT-XL/2 \
+  --image-size 256 \
+  --num-classes 1000 \
+  --epochs 1400 \
+  --global-batch-size 256 \
+  --vae ema
 ```
 
-The meaning of those parameters:
+#### Key arguments
 
-`--checkpoint` The checkpoint you saved.
+* `--data-path` — Path to dataset root (ImageFolder format)
+* `--results-dir` — Output directory for logs and checkpoints
+* `--model` — Model architecture (`DiT-XL/2`, etc.)
+* `--image-size` — Image resolution (`128`, `256`, `512`)
+* `--num-classes` — Number of classes in the dataset
+* `--epochs` — Training epochs
+* `--global-batch-size` — Total batch size across all GPUs
+* `--vae` — Pretrained VAE variant (`ema` or `mse`)
 
-`--dataset` The dataset to attack. It can be `cifar10`,`cifar100`,`stl10` or `TINY-IN`.
+#### Outputs
 
-`--attacker_name` The attack method. `naive` for Loss attack. `SecMI` for SecMI attack. `PIA` for PIA and `PIAN` for PIAN, `Denoise` for our algorithm rediffuse attack.
+* Training logs in `<results-dir>/<EXP_ID>-<MODEL>/log.txt`
+* Checkpoints in `<results-dir>/<EXP_ID>-<MODEL>/checkpoints/`
+
+---
+
+### Attack DIT Model
+
+Runs membership inference attacks (MIA) on a trained DiT checkpoint.
+Supports multiple attack types: `Naive`, `SecMI`, `PIA`, `PIAN`, `Denoise`.
+
+#### Example command
+
+```bash
+python attack.py \
+  --model DiT-XL/2 \
+  --vae mse \
+  --image-size 256 \
+  --ckpt /path/to/checkpoint.pt \
+  --member-data-path /path/to/member/images \
+  --nonmember-data-path /path/to/nonmember/images \
+  --mia-type denoise \
+  --t-step 1 \
+  --k 10 \
+  --experiments 10
+```
+
+#### Key arguments
+
+* `--model` — Model architecture (`DiT-XL/2`, etc.)
+* `--vae` — Pretrained VAE variant (`ema` or `mse`)
+* `--image-size` — Image resolution (`128`, `256`, `512`)
+* `--ckpt` — Path to trained checkpoint (`.pt`)
+* `--member-data-path` — Path to member dataset
+* `--nonmember-data-path` — Path to non-member dataset
+* `--mia-type` — Attack type:
+  `naive` | `secmi` | `pia` | `pian` | `denoise`
+* `--t-step` — Number of timesteps for adding noise
+* `--k` — Step size for DDIM sampling
+* `--experiments` — Number of repeated runs for averaging
+
+#### Outputs
+
+* Console: `AUC`, `ASR`, `TPR@1%FPR`
+* Appends results to `results.csv`
+
+---
 
 ## Stable Diffusion
 
-We conduct experiments on the original Stable Diffusion model, i.e., stable-diffusion-v1-5 provided by Huggingface, without further fine-tuning or modifications.
+### Requirements
 
-### attack Stable Diffusion
+Install dependencies from the provided conda environment file:
 
-for our algorithm rediffuse attack, just run command below.
 ```bash
-cd stable_diffusion
-python stable_attack.py 
+conda env create -f Stable_Diffusion/environment.yml
 ```
 
-for our algorithm rediffuse+ attack, just run command below.
+---
+
+### No Training (Pretrained v1.4)
+
+This pipeline uses a pretrained Stable Diffusion v1.4 checkpoint and **does not** train any model.
+By default it loads from: `CompVis/stable-diffusion-v1-4`.
+
+---
+
+### Attack Stable Diffusion
+
+Runs membership inference attacks (MIA) against Stable Diffusion using your provided script.
+Supported attackers: `SecMI`, `PIA`, `Naive`, `PIAN`, `ReDiffuse` (default).
+
+#### Example command
+
 ```bash
-cd stable_diffusion
-python two_attack.py 
+python attack_sd.py \
+  --attacker_name ReDiffuse \
+  --dataset laion5 \
+  --checkpoint CompVis/stable-diffusion-v1-4 \
+  --attack_num 1 \
+  --interval 50 \
+  --k 50 \
+  --average 1 \
+  --seed 0
 ```
 
+> The script auto-selects a GPU with free memory via NVML; no need to pass `--device`.
 
-**Acknowledgements**: this repository uses codes and resources from [An Efficient Membership Inference Attack for the Diffusion Model by Proximal Initialization](https://github.com/kong13661/PIA).
+#### Key parameters
 
+* `--attacker_name` — Attack method (case-sensitive):
+  `SecMI` | `PIA` | `Naive` | `PIAN` | `ReDiffuse`
+* `--dataset` — Dataset name passed to `load_member_data` (e.g., `laion5`).
+* `--checkpoint` — pretrained model of stable diffusion (default: `CompVis/stable-diffusion-v1-4`)
+* `--attack_num` — Number of attack rounds per sample
+* `--interval` — DDIM interval used inside the attacker
+* `--k` — DDIM step size
+* `--average` — Number of repeated runs for averaging (some attackers)
+* `--seed` — Random seed
+
+
+---
+
+### Outputs
+
+* Console metrics: `AUC`, `ASR`, `TPR@1%FPR`
+* Appends a CSV row to `result.csv` with:
+
+  ```
+  dataset,attacker_name,update,attack_num,interval,k,average,auc,asr,tpr@1%fpr
+  ```
+
+---
+
+**Acknowledgements**: this repository uses codes and resources from [An Efficient Membership Inference Attack for the Diffusion Model by Proximal Initialization](https://github.com/kong13661/PIA), [Scalable Diffusion Models with Transformers (DiT)](https://github.com/facebookresearch/DiT).
 
 ## Citation
 
@@ -129,7 +241,6 @@ python two_attack.py
   title={Towards black-box membership inference attack for diffusion models},
   author={Li, Jingwei and Dong, Jing and He, Tianxing and Zhang, Jingzhao},
   booktitle={International Conference on Machine Learning},
-  <!-- pages={8717--8730}, -->
   year={2025},
   organization={PMLR}
 }

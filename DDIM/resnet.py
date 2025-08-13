@@ -68,11 +68,8 @@ class ResNet(nn.Module):
     def __init__(self, block, num_blocks, num_channels=3, num_classes=2):
         super(ResNet, self).__init__()
         self.in_planes = 64
-
-        # 调整初始卷积层的步长为2
         self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
-        # 添加最大池化层来进一步减少特征图尺寸
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
@@ -91,7 +88,7 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
-        out = self.maxpool(out)  # 应用最大池化
+        out = self.maxpool(out)  
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
@@ -128,4 +125,3 @@ def test():
     y = net(Variable(torch.randn(1, 3, 32, 32)))
     print(y.size())
     print(net)
-# test()

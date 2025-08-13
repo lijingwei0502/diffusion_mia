@@ -245,25 +245,18 @@ class ReDiffuseAttacker(DDIMAttacker):
 
                 epsilon = torch.randn_like(x0)
 
-                # DDPM adds noise to the image to simulate the forward process
                 x_t_target = alphas_t_target.sqrt() * x0 + (1 - alphas_t_target).sqrt() * epsilon
 
-                # Reverse process
                 for j in range(step, 0, -self.k):
                     alphas_t = self.noise_level[j]
                     alphas_t_prev = self.noise_level[j - self.k]
                     sqrt_recip_alpha = (1 / alphas_t).sqrt()
                     sqrt_one_minus_alpha_bar = (1 - alphas_t).sqrt()
-                    sqrt_one_minus_alpha_bar_prev = (1 - alphas_t_prev).sqrt()
 
-                    # Calculate sigma_t using the provided formula
                     beta_t = self.betas[j]
                     sigma_t = ((beta_t * (1 - alphas_t_prev)) / (1 - alphas_t)).sqrt()
 
-                    # Get predicted noise using the neural network model
                     predicted_noise = self.eps_getter(x_t_target, condition, self.noise_level, j)
-
-                    # DDPM reverse process: apply the correct formula
                     x_t_target = sqrt_recip_alpha * (x_t_target - (1 - alphas_t) / sqrt_one_minus_alpha_bar * predicted_noise)
                     
                     if j > 1:

@@ -153,24 +153,7 @@ def get_dataset(FLAGS, only_member=False):
                                              (0.5, 0.5, 0.5))
         ])
         dataset = MIASTL10(member_idxs, root='data/datasets/pytorch', split='unlabeled',
-                               download=True, transform=transforms)
-    elif FLAGS.dataset.upper() == 'TINY-IN':
-        transforms = torchvision.transforms.Compose([torchvision.transforms.RandomHorizontalFlip(),
-                                                     torchvision.transforms.Resize((FLAGS.img_size, FLAGS.img_size)),
-                                                     torchvision.transforms.ToTensor(),
-                                                     torchvision.transforms.Normalize((0.5, 0.5, 0.5),
-                                                                                      (0.5, 0.5, 0.5))])
-        dataset = MIAImageFolder(member_idxs, root='data/datasets/pytorch/tiny-imagenet-200/train', 
-                                 transform=transforms)
-        
-    elif FLAGS.dataset.upper() == 'SVHN':
-        transforms = torchvision.transforms.Compose([
-            torchvision.transforms.RandomHorizontalFlip(),
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
-        dataset = MIASVHN(member_idxs, root='data/datasets/pytorch', split='train',
-                               download=True, transform=transforms)
+                               download=True, transform=transforms)        
         
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=FLAGS.batch_size, shuffle=True, drop_last=True,
                                               num_workers=FLAGS.num_workers)
@@ -219,15 +202,6 @@ def train():
         ema_sampler = torch.nn.DataParallel(ema_sampler)
 
     datalooper = infiniteloop(dataloader)
-
-    # checkpoint_path = 'logs/DDPM_STL10_EPS/ckpt-step800000.pt'  # 替换为你的实际路径
-    # # 加载检查点
-    # step = 0
-    # x_T = None
-    # if checkpoint_path:
-    #     step, x_T = load_checkpoint(checkpoint_path, net_model, ema_model, optim, sched, device)
-
-
     # log setup
     if not os.path.exists(os.path.join(FLAGS.logdir, 'sample')):
         os.makedirs(os.path.join(FLAGS.logdir, 'sample'))

@@ -10,14 +10,8 @@ from typing import Type, Dict
 from itertools import chain
 from model_unet import UNet
 from dataset_utils import load_member_data
-from torchmetrics.classification import BinaryAUROC, BinaryROC
-import tqdm
 from sklearn import metrics
 import resnet
-import matplotlib.pyplot as plt
-from torchvision.utils import save_image
-from sklearn.metrics import roc_curve, auc
-
 import pynvml
 import copy
 
@@ -268,9 +262,6 @@ def roc(member_scores, nonmember_scores, n_points=1000):
     auc = metrics.auc(FPR_list, TPR_list)
     return auc, max_asr, torch.from_numpy(FPR_list), torch.from_numpy(TPR_list), max_threshold
 
-def calculate_distance(x0, x1):
-    return ((x0 - x1).abs() ** 2).flatten(2).sum(dim=-1)
-
 def main(checkpoint=800000,
          dataset='CIFAR10',
          attacker_name="ReDiffuse",
@@ -303,8 +294,10 @@ def main(checkpoint=800000,
     elif dataset == 'TINY-IN':
         _, _, train_loader, test_loader = load_member_data(dataset_name='TINY-IN', batch_size=64,
                                                            shuffle=False, randaugment=False)
+    elif dataset == 'SVHN':
+        _, _, train_loader, test_loader = load_member_data(dataset_name='SVHN', batch_size=64,
+                                                           shuffle=False, randaugment=False)
 
-    print(FLAGS.beta_1, FLAGS.beta_T)
     attacker = attackers[attacker_name](
         torch.from_numpy(np.linspace(FLAGS.beta_1, FLAGS.beta_T, FLAGS.T)).to(DEVICE), interval, attack_num, k, EpsGetter(model_unet), average, lambda x: x * 2 - 1)
 
@@ -327,17 +320,11 @@ def main(checkpoint=800000,
     members_sample = torch.concat(members_sample)
     nonmembers_diffusion = torch.concat(nonmembers_diffusion)
     nonmembers_sample = torch.concat(nonmembers_sample)
-    members_distance = calculate_distance(members_diffusion, members_sample)
-    nonmembers_distance = calculate_distance(nonmembers_diffusion, nonmembers_sample)
+    member, nonmember = nns_attack(DEVICE, members_diffusion, members_sample, nonmembers_diffusion, nonmembers_sample, norm, 0.2)
+    member *= -1
+    nonmember *= -1
    
-    auc, asr, fpr_list, tpr_list, threshold = roc(members_distance, nonmembers_distance, n_points=2000)
-    # 保存fpr和tpr
-    # fpr_list = fpr_list.numpy()
-    # tpr_list = tpr_list.numpy()
-    # f = open('roc_curve/fpr_tpr' + str(attacker_name) + '.csv', 'w')
-    # f.write('fpr,tpr\n')
-    # for i in range(len(fpr_list)):
-    #     f.write(str(fpr_list[i]) + ',' + str(tpr_list[i]) + '\n')
+    auc, asr, fpr_list, tpr_list, threshold = roc(member, nonmember, n_points=2000)
     
     # TPR @ 1% FPR
     asr = asr.item()
@@ -350,7 +337,7 @@ def main(checkpoint=800000,
 
     result_dir = 'result.csv'
     f = open(result_dir, 'a')
-    f.write(str(checkpoint) + ',' + dataset + ',' + attacker_name + ',' + str(attack_num) + ',' + str(interval) + ',' + str(norm) + ',' + str(k))
+    f.write(str(checkpoint) + ',' + dataset + ',' + attacker_name + ',' + str(seed)+ ',' + str(attack_num) + ',' + str(interval) + ',' + str(norm) + ',' + str(k))
     f.write(',' + str(auc) + ',' + str(asr) + ',' + str(tpr_1_fpr) + '\n')
 
 if __name__ == '__main__':

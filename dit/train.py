@@ -164,44 +164,23 @@ def main(args):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
-    # 创建ImageNet数据集对象
     dataset = ImageFolder(args.data_path, transform=transform)
-
-    # 随机抽取10万张图片的索引
     num_samples = 100000
     all_indices = list(range(len(dataset)))
     random.seed(args.global_seed)
     sample_indices = random.sample(all_indices, num_samples)
-
-    # 创建子集
     subset = Subset(dataset, sample_indices)
-
-    # 新文件夹路径
     output_dir = "/data_server3/ljw/imagenet/member_512"
-
-    # 如果新文件夹不存在，创建它
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
-        # 复制文件
         for idx in sample_indices:
             img_path, _ = dataset.imgs[idx]
             img_name = os.path.basename(img_path)
-            
-            # 获取类文件夹的名称
             class_dir = os.path.basename(os.path.dirname(img_path))
-            
-            # 创建目标类文件夹路径
             target_dir = os.path.join(output_dir, class_dir)
-            
-            # 如果目标类文件夹不存在，创建它
             os.makedirs(target_dir, exist_ok=True)
-            
-            # 复制文件到对应的类文件夹
             shutil.copy(img_path, os.path.join(target_dir, img_name))
 
-        print("图片复制完成。")
-    # 创建DistributedSampler和DataLoader
     sampler = DistributedSampler(
         subset,
         num_replicas=dist.get_world_size(),

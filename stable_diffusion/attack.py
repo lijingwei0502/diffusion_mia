@@ -8,12 +8,11 @@ from rich.logging import RichHandler
 from rich.progress import track
 from itertools import chain
 import fire
-import pynvml
-from sklearn import metrics
 import numpy as np
 from dataset import load_member_data
-from collections import defaultdict
-from torchmetrics.classification import BinaryAUROC, BinaryROC
+import pynvml
+from sklearn import metrics
+from skimage.metrics import structural_similarity as ssim
 
 def found_device():
     default_device=0
@@ -38,7 +37,7 @@ DEVICE = torch.device(device_str)
 
 class EpsGetter(components.EpsGetter):
     def __call__(self, xt: torch.Tensor, condition: torch.Tensor = None, noise_level=None, t: int = None) -> torch.Tensor:
-        # t = torch.ones([xt.shape[0]], device=xt.device).long() * t
+    
         return self.model(t, condition, latents=xt)
 
 
@@ -118,6 +117,13 @@ class MyStableDiffusionPipeline(StableDiffusionPipeline):
         image = self.image_processor.postprocess(image, output_type="pil", do_denormalize=do_denormalize)
         return image
 
+def calculate_ssim(image1, image2):
+    image1 = np.array(image1.convert('L'))
+    image2 = np.array(image2.convert('L'))
+  
+    ssim_value = ssim(image1, image2, data_range=image2.max() - image2.min())
+    
+    return ssim_value
 
 def get_FLAGS():
 
@@ -137,11 +143,24 @@ def get_FLAGS():
 attackers: Dict[str, Type[components.DDIMAttacker]] = {
     "SecMI": components.SecMIAttacker,
     "PIA": components.PIA,
-    "naive": components.NaiveAttacker,
+    "Naive": components.NaiveAttacker,
     "PIAN": components.PIAN,
+    "ReDiffuse": components.ReDiffuseAttacker
 }
 
+class MIDataset():
 
+    def __init__(self, member_data, nonmember_data, member_label, nonmember_label):
+        self.data = torch.concat([member_data, nonmember_data])
+        self.label = torch.concat([member_label, nonmember_label]).reshape(-1)
+
+    def __len__(self):
+        return self.data.size(0)
+
+    def __getitem__(self, item):
+        data = self.data[item]
+        return data, self.label[item]
+    
 def roc(member_scores, nonmember_scores, n_points=1000):
     max_asr = 0
     max_threshold = 0
@@ -175,17 +194,15 @@ def roc(member_scores, nonmember_scores, n_points=1000):
     auc = metrics.auc(FPR_list, TPR_list)
     return auc, max_asr, torch.from_numpy(FPR_list), torch.from_numpy(TPR_list), max_threshold
 
-
-@torch.no_grad()
-def main(attacker_name,
-         dataset,
+def main(attacker_name="ReDiffuse", update=0,
+         dataset="laion5",
          checkpoint="CompVis/stable-diffusion-v1-4",
-         norm_p=2,
-         attack_num=1, interval=100,
+         attack_num=1, interval=50,
          save_logger=None,
-         seed=0):
+         seed=0,k=50,average=1):
     seed_everything(seed)
 
+    #runwayml/stable-diffusion-v1-5
     FLAGS = get_FLAGS()
 
     logger = logging.getLogger()
@@ -196,8 +213,7 @@ def main(attacker_name,
     logger.info("loading model...")
     model = MyStableDiffusionPipeline.from_pretrained(checkpoint, torch_dtype=torch.float32)
     model = model.to(DEVICE)
-    # model.eval()
-
+    
     def attacker_wrapper(attack):
         def wrapper(x, condition=None):
             x = model.prepare_latent(x)
@@ -213,28 +229,57 @@ def main(attacker_name,
     _, _, train_loader, test_loader = load_member_data(dataset_name=dataset, batch_size=4)
 
     attacker = attackers[attacker_name](
-        torch.from_numpy(np.linspace(FLAGS.beta_1, FLAGS.beta_T, FLAGS.T)).to(DEVICE), interval,1,attack_num,1, EpsGetter(model), lambda x: x * 2 - 1)
+        torch.from_numpy(np.linspace(FLAGS.beta_1, FLAGS.beta_T, FLAGS.T)).to(DEVICE), interval, average, attack_num, k, EpsGetter(model), lambda x: x * 2 - 1)
     attacker = attacker_wrapper(attacker)
 
     logger.info("attack start...")
     members, nonmembers = [], []
 
-    for member, nonmember in track(zip(train_loader, chain(*([test_loader]))), total=len(test_loader)):
-        member_condition, nonmenmer_condition = member[1], nonmember[1]
-        member, nonmember = member[0].to(DEVICE), nonmember[0].to(DEVICE)
+    with torch.no_grad():
+        for member, nonmember in track(zip(train_loader, chain(*([test_loader]))), total=len(test_loader)):
+            member_condition, nonmember_condition = member[1], nonmember[1]
+            member, nonmember = member[0].to(DEVICE), nonmember[0].to(DEVICE)
 
-        intermediate_reverse_member, intermediate_denoise_member = attacker(member, member_condition)
-        intermediate_reverse_nonmember, intermediate_denoise_nonmember = attacker(nonmember, nonmenmer_condition)
+            # First attacker call with actual conditions
+            intermediate_reverse_member, intermediate_denoise_member = attacker(member, member_condition)
+            intermediate_reverse_nonmember, intermediate_denoise_nonmember = attacker(nonmember, nonmember_condition)
+            
+            if attacker_name == 'ReDiffuse':
+                prime_member = intermediate_reverse_member[0]
+                prime_member = (prime_member + 1) / 2
+                prime_member = model.get_image(prime_member)
+                prime_nonmember = intermediate_reverse_nonmember[0]
+                prime_nonmember = (prime_nonmember + 1) / 2
+                prime_nonmember = model.get_image(prime_nonmember)
 
-        members.append(((intermediate_reverse_member - intermediate_denoise_member).abs() ** norm_p).flatten(2).sum(dim=-1))
-        nonmembers.append(((intermediate_reverse_nonmember - intermediate_denoise_nonmember).abs() ** norm_p).flatten(2).sum(dim=-1))
+                reconstruction_member = intermediate_denoise_member[0]
+                reconstruction_member = (reconstruction_member + 1) / 2
+                reconstruction_member = model.get_image(reconstruction_member)
+                reconstruction_nonmember = intermediate_denoise_nonmember[0]
+                reconstruction_nonmember = (reconstruction_nonmember + 1) / 2
+                reconstruction_nonmember = model.get_image(reconstruction_nonmember)
 
-        members = [torch.cat(members, dim=-1)]
-        nonmembers = [torch.cat(nonmembers, dim=-1)]
+                # Calculate the distance
+                for i in range(len(prime_member)):
+                    dist_mem = calculate_ssim(prime_member[i], reconstruction_member[i])
+                    dist_non = calculate_ssim(prime_nonmember[i], reconstruction_nonmember[i])
+                    members.append(dist_mem)
+                    nonmembers.append(dist_non)
+            
+            else:
+                members.append(((intermediate_reverse_member - intermediate_denoise_member).abs() ** 2).flatten(2).sum(dim=-1))
+                nonmembers.append(((intermediate_reverse_nonmember - intermediate_denoise_nonmember).abs() ** 2).flatten(2).sum(dim=-1))
+                members = [torch.cat(members, dim=-1)]
+                nonmembers = [torch.cat(nonmembers, dim=-1)]
 
-    member = members[0]
-    nonmember = nonmembers[0]
-    
+    if attacker_name == 'ReDiffuse':
+        member = torch.tensor(members)
+        nonmember = torch.tensor(nonmembers)
+        member *= -1
+        nonmember *= -1
+    else:
+        member = members[0]
+        nonmember = nonmembers[0]
     auc, asr, fpr_list, tpr_list, threshold = roc(member, nonmember, n_points=2000)
     # TPR @ 1% FPR
     asr = asr.item()
@@ -245,9 +290,8 @@ def main(attacker_name,
     print('TPR @ 1% FPR:', tpr_1_fpr)
     result_dir = 'result.csv'
     f = open(result_dir, 'a')
-    f.write(dataset + ',' + attacker_name + ','  + str(attack_num) + ',' + str(interval) )
+    f.write(dataset + ',' + attacker_name + ',' + str(update) + ',' + str(attack_num) + ',' + str(interval) + ',' + str(k) + ',' + str(average))
     f.write(',' + str(auc) + ',' + str(asr) + ',' + str(tpr_1_fpr) + '\n')
-
-
+     
 if __name__ == '__main__':
     fire.Fire(main)

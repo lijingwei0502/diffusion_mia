@@ -5,15 +5,14 @@ import subprocess
     
 random.seed(0)
 
-ckpt = ['487000']
-dataset = ['SVHN']
-#dataset = ['CIFAR100','STL10','TINY-IN']
-attacker_name = ['ReDiffuse']
+ckpt = ['800000']
+dataset = ['CIFAR10','CIFAR100','STL10']
+attacker_name = ['ReDiffuse',"SecMI","PIA","Naive","PIAN"]
 attack_num = ['1']
-interval = ['200']
-kk = ['100']
+interval = ['100']
+kk = ['10']
 seed = ['1']
-averages = ['10']
+averages = ['1']
 processes = []
 
 for se in seed:
@@ -24,7 +23,7 @@ for se in seed:
                     for inr in interval:
                         for k in kk:
                             for av in averages:
-                                cmd = f'python nn_attack.py --checkpoint {ck} --dataset {ds} --attacker_name {an} --attack_num {anum} --interval {inr} --k {k} --seed {se} --average {av}'
+                                cmd = f'python attack.py --checkpoint {ck} --dataset {ds} --attacker_name {an} --attack_num {anum} --interval {inr} --k {k} --seed {se} --average {av}'
                                 processes.append(subprocess.Popen(cmd, shell=True))
                                 time.sleep(20)
 

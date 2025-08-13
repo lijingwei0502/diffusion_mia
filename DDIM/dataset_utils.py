@@ -1,14 +1,7 @@
 import os.path
-import sys
-
-# sys.path.append('.')
-
 import torch
 import torchvision.datasets
 import numpy as np
-
-# from measures import ssim
-
 
 class MIACIFAR10(torchvision.datasets.CIFAR10):
 
@@ -48,31 +41,6 @@ class MIASTL10(torchvision.datasets.STL10):
     def __getitem__(self, item):
         item = self.idxs[item]
         return super(MIASTL10, self).__getitem__(item)
-
-class MIAImageFolder(torchvision.datasets.ImageFolder):
-
-    def __init__(self, idxs, **kwargs):
-        super(MIAImageFolder, self).__init__(**kwargs)
-        self.idxs = idxs
-
-    def __len__(self):
-        return len(self.idxs)
-
-    def __getitem__(self, item):
-        item = self.idxs[item]
-        return super(MIAImageFolder, self).__getitem__(item)
-
-class MIASVHN(torchvision.datasets.SVHN):
-    def __init__(self, idxs, **kwargs):
-        super(MIASVHN, self).__init__(**kwargs)
-        self.idxs = idxs
-
-    def __len__(self):
-        return len(self.idxs)
-
-    def __getitem__(self, item):
-        item = self.idxs[item]
-        return super(MIASVHN, self).__getitem__(item)
 
 def load_member_data(dataset_name, batch_size=128, shuffle=False, randaugment=False):
     member_split_root = ''
@@ -119,33 +87,6 @@ def load_member_data(dataset_name, batch_size=128, shuffle=False, randaugment=Fa
                               transform=transforms)
         nonmember_set = MIASTL10(nonmember_idxs, root=os.path.join(dataset_root, 'stl10'), split='unlabeled',
                                  transform=transforms)
-    elif dataset_name.upper() == 'TINY-IN':
-        splits = np.load(os.path.join(member_split_root, 'TINY-IN_train_ratio0.5.npz'))
-        member_idxs = splits['mia_train_idxs']
-        nonmember_idxs = splits['mia_eval_idxs']
-        transforms = torchvision.transforms.Compose([
-            torchvision.transforms.Resize(32),
-            torchvision.transforms.ToTensor()
-        ])
-        member_set = MIAImageFolder(member_idxs, root=os.path.join(dataset_root, 'tiny-imagenet-200/train'), 
-                                    transform=transforms)
-        nonmember_set = MIAImageFolder(nonmember_idxs, root=os.path.join(dataset_root, 'tiny-imagenet-200/train'), 
-                                       transform=transforms)
-    elif dataset_name.upper() == 'SVHN':
-        splits = np.load(os.path.join(member_split_root, 'SVHN_train_ratio0.5.npz'))
-        member_idxs = splits['mia_train_idxs']
-        nonmember_idxs = splits['mia_eval_idxs']
-        # load MIA Datasets
-        if randaugment:
-            transforms = torchvision.transforms.Compose([torchvision.transforms.RandAugment(num_ops=5),
-                                                        torchvision.transforms.ToTensor()])
-        else:
-            transforms = torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor()])
-        member_set = MIASVHN(member_idxs, root=os.path.join(dataset_root, 'svhn'), split='train',
-                            transform=transforms)
-        nonmember_set = MIASVHN(nonmember_idxs, root=os.path.join(dataset_root, 'svhn'), split='train',
-                                transform=transforms)
     else:
         raise NotImplementedError
 

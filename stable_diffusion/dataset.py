@@ -51,66 +51,6 @@ class Laion5Generated(Laion5):
             img, caption = self.transforms(img, caption)
         return img, caption
 
-class Laion5GeneratedDALLE(Laion5):
-    def __init__(self, root: str, metadata, generated, file_path, transforms=None, transform=None, target_transform=None):
-        super().__init__(root, metadata, transforms, transform, target_transform)
-        
-        self.image_files = {file.split('.')[0]: file for file in os.listdir(file_path) if file.lower().endswith(('png', 'jpg', 'jpeg'))}
-        self.name = root
-        
-        self.generated = pd.read_csv(generated)
-        self.generated = self.generated[self.generated['file_name'].str.split('.').str[0].isin(self.image_files.keys())]
-
-    def __getitem__(self, index: int) -> Any:
-        return self._get_valid_item(index, set())
-
-    def _get_valid_item(self, index: int, tried_indices: set) -> Any:
-        if index >= len(self.generated) or index in tried_indices:
-            raise IndexError("No valid image file found in the specified range or all files have been tried.")
-        
-        tried_indices.add(index)
-        file_name = self.generated.iloc[index]['file_name']
-        file_path = os.path.join(self.root, self.image_files[file_name.split('.')[0]])
-       
-        try:
-            img = Image.open(file_path).convert('RGB')
-            caption = self.generated.iloc[index]['caption']
-            if self.transforms is not None:
-                img, caption = self.transforms(img, caption)
-            
-            return img, caption
-        except FileNotFoundError:
-            return self._get_valid_item(index + 1, tried_indices)
-
-    def __len__(self) -> int:
-        return len(self.generated)
-    
-class Laion5Generatednew(Laion5):
-    def __init__(self, root: str, metadata, generated: str, transforms=None, transform=None, target_transform=None) -> None:
-        super().__init__(root, metadata, transforms, transform, target_transform)
-        self.generated = pd.read_csv(generated)
-    
-    def __getitem__(self, index: int) -> Any:
-        # Get the file name from the generated DataFrame
-        file_name = self.generated.iloc[index]['Image Name']
-        
-        # Load the image
-        img_path = os.path.join(self.root, file_name)
-        img = Image.open(img_path).convert('RGB')
-        
-        # Get the caption
-        caption = self.generated.iloc[index]['Title']
-        
-        # Apply transforms if provided
-        if self.transforms is not None:
-            img, caption = self.transforms(img, caption)
-                
-        return img, caption
-
-    def __len__(self) -> int:
-        # Return the total number of items
-        return len(self.generated)
-
 class CocoDetection(_CocoDetection):
     def __init__(self, root: str, annFile: str, transform = None, target_transform = None, transforms = None) -> None:
         super().__init__(root, annFile, transform, target_transform, transforms)
@@ -178,25 +118,6 @@ def load_member_data(dataset_name, batch_size=4):
                                                annFile=coco_dataset_anno,
                                                generated=f'{stable_diffusion_data}/text_generation/val2017.csv',
                                                transform=transform)
-    elif dataset_name == 'laion5_dalle':
-        generate_path = 'image_dalle'
-        member_set = Laion5GeneratedDALLE(f"{stable_diffusion_data}/images-random",
-                                     f"{stable_diffusion_data}/val-list-2500-random.npy", 
-                                     f'{stable_diffusion_data}/text_generation/images-random.csv', f"{stable_diffusion_data}/{generate_path}",
-                                     transform=transform)
-        nonmember_set = Laion5GeneratedDALLE(f"{stable_diffusion_data}/{generate_path}",
-                                     f"{stable_diffusion_data}/val-list-2500-random.npy", 
-                                     f'{stable_diffusion_data}/text_generation/images-random.csv', f"{stable_diffusion_data}/{generate_path}",
-                                     transform=transform)
-    elif dataset_name == 'laion5_new':
-        member_set = Laion5Generatednew(f"member",
-                                        f"{stable_diffusion_data}/val-list-2500-random.npy",
-                                     f'member_titles.csv', 
-                                     transform=transform)
-        nonmember_set = Laion5Generatednew(f"nonmember",
-                                           f"{stable_diffusion_data}/val-list-2500-random.npy",
-                                     f'nonmember_titles.csv', 
-                                     transform=transform)
 
 
     member_loader = torch.utils.data.DataLoader(member_set, batch_size=batch_size, collate_fn=member_set.collate_fn)

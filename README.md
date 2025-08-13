@@ -75,7 +75,7 @@ python attack.py \
 
 ---
 
-## DIT
+## DiT
 
 ### Requirements
 
@@ -87,7 +87,7 @@ conda env create -f DiT/environment.yml
 
 ---
 
-### Train DIT Model
+### Train DiT Model
 
 We use the DiT-XL/2 architecture by default. The script supports multi-GPU training via PyTorch DDP.
 
@@ -124,7 +124,7 @@ torchrun --nproc_per_node=<NUM_GPUS> train.py \
 
 ---
 
-### Attack DIT Model
+### Attack DiT Model
 
 Runs membership inference attacks (MIA) on a trained DiT checkpoint.
 Supports multiple attack types: `Naive`, `SecMI`, `PIA`, `PIAN`, `Denoise`.
@@ -178,7 +178,7 @@ conda env create -f Stable_Diffusion/environment.yml
 
 ---
 
-### No Training (Pretrained v1.4)
+### Use Pretrained Checkpoint
 
 This pipeline uses a pretrained Stable Diffusion v1.4 checkpoint and **does not** train any model.
 By default it loads from: `CompVis/stable-diffusion-v1-4`.

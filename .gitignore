@@ -1,10 +1,6 @@
 data/
 stable_diffusion_data/
 coco_data/
-dalle/
 results/
 pretrained_models/
 logs/
-runs.py
-__pycache__
-coco-2500-random.yaml

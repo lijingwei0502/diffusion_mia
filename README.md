@@ -22,13 +22,6 @@ Place the raw datasets (`cifar10`, `cifar100`, `stl10`) under:
 DDIM/data/datasets/pytorch
 ```
 
-You can change the logging directory and dataset name in `train.py`:
-
-```python
-FLAGS.logdir   # e.g., './logs/DDPM_SVHN_EPS'
-FLAGS.dataset  # 'CIFAR10' | 'CIFAR100' | 'STL10' |
-```
-
 To train the model:
 
 ```bash
@@ -246,3 +239,4 @@ python attack_sd.py \
 }
 
 ```
+
